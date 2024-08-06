@@ -17,10 +17,11 @@ knit: reprex::reprex_render
 
 ```{r}
 
+
 library(tidyverse)
 library(readxl)
 
-# semester_dummy_1.csvとsemester_dummy_2.csvを読み込む
+# semester_dummy_1.csvとsemester_dummy_2.csvの読み込み
 semester_data_1 <- read_csv("C:\\Users\\yoshimura hiroki\\Box\\Personal\\topic\\coding\\github_practice\\RA\\warmup training package\\warmup training package\\01_data\\raw\\semester_dummy\\semester_data_1.csv", col_names = TRUE,skip=1)
 print(head(semester_data_1))
 semester_data_2 <- read_csv("C:\\Users\\yoshimura hiroki\\Box\\Personal\\topic\\coding\\github_practice\\RA\\warmup training package\\warmup training package\\01_data\\raw\\semester_dummy\\semester_data_2.csv")
