@@ -1,0 +1,302 @@
+
+
+
+
+---
+output:
+  reprex::reprex_document:
+    venue: "gh"
+    advertise: FALSE
+    session_info: TRUE
+    style: TRUE
+    comment: "#;-)"
+    tidyverse_quiet: FALSE
+    std_out_err: TRUE
+knit: reprex::reprex_render
+---
+
+```{r}
+
+library(tidyverse)
+library(readxl)
+
+# semester_dummy_1.csvとsemester_dummy_2.csvを読み込む
+semester_data_1 <- read_csv("C:\\Users\\yoshimura hiroki\\Box\\Personal\\topic\\coding\\github_practice\\RA\\warmup training package\\warmup training package\\01_data\\raw\\semester_dummy\\semester_data_1.csv", col_names = TRUE,skip=1)
+print(head(semester_data_1))
+semester_data_2 <- read_csv("C:\\Users\\yoshimura hiroki\\Box\\Personal\\topic\\coding\\github_practice\\RA\\warmup training package\\warmup training package\\01_data\\raw\\semester_dummy\\semester_data_2.csv")
+print(head(semester_data_2))
+
+
+# 2つ目のデータフレームの列名を1つ目のデータフレームの列名に合わせる
+colnames(semester_data_2) <- colnames(semester_data_1)
+
+# 縦にスタック
+semester_data <- bind_rows(semester_data_1, semester_data_2)
+
+
+# 'Y'列を削除
+semester_data <- semester_data %>% select(-Y)
+semester_data <- semester_data %>% mutate(year = as.numeric(year))
+
+
+
+
+
+print(head(semester_data))
+
+```
+
+```{r}
+
+# outcomeフォルダ内の全てのExcelファイルを読み込み、結合
+file_paths <- list.files("C:\\Users\\yoshimura hiroki\\Box\\Personal\\topic\\coding\\github_practice\\RA\\warmup training package\\warmup training package\\01_data\\raw\\outcome", full.names = TRUE, pattern = "\\.xlsx$")
+
+gradrate_data <- file_paths %>%
+  map_dfr(~ read_excel(.x))
+
+
+
+
+# 男女合計の4年卒業率と男子学生の4年卒業率を計算し、新たな列として追加
+
+gradrate_data <- gradrate_data %>%
+  mutate(
+    women_gradrate_4yr = as.numeric(women_gradrate_4yr),
+    m_4yrgrads = as.numeric(m_4yrgrads),
+    m_cohortsize = as.numeric(m_cohortsize),
+    tot4yrgrads = as.numeric(tot4yrgrads),
+    totcohortsize = as.numeric(totcohortsize)
+  ) %>%
+  mutate(
+    women_gradrate_4yr = women_gradrate_4yr * 0.01,
+    men_gradrate_4yr = m_4yrgrads / m_cohortsize,
+    total_gradrate_4yr = tot4yrgrads / totcohortsize
+  )
+
+
+# 計算した卒業率を有効数字3桁に調整
+gradrate_data <- gradrate_data %>%
+  mutate(across(ends_with("gradrate_4yr"), ~ round(., 3)))
+
+# 1991年から2010年までのデータフレームに変形
+gradrate_data <- gradrate_data %>%
+  filter(year >= 1991 & year <= 2010)
+
+print(head(gradrate_data))
+print(names(gradrate_data))
+```
+
+
+```{r}
+
+
+# データの読み込み
+covariates_data <- read_excel("C:\\Users\\yoshimura hiroki\\Box\\Personal\\topic\\coding\\github_practice\\RA\\warmup training package\\warmup training package\\01_data\\raw\\covariates\\covariates.xlsx")
+
+# 列名の変換
+covariates_data <- covariates_data %>%
+  rename(unitid = university_id)
+
+# unitid列の"aaaa"を変換
+covariates_data <- covariates_data %>%
+  mutate(unitid = str_replace_all(unitid, "aaaa", ""))
+
+# 数値型に変換する列を指定
+numeric_columns <- c("unitid", "year")  # 数値型に変換したい列を指定
+covariates_data <- covariates_data %>%
+  mutate(across(all_of(numeric_columns), as.numeric))
+
+# pivot_widerで重複する値を処理
+covariates_data <- covariates_data %>%
+  pivot_wider(names_from = category, values_from = value)
+
+
+# 年のフィルタリング
+covariates_data <- covariates_data %>%
+  filter(year %in% unique(gradrate_data$year)) %>%
+  filter(year %in% unique(semester_data$year))
+
+# unitidのフィルタリング
+covariates_data <- covariates_data %>%
+  filter(unitid %in% unique(gradrate_data$unitid))
+
+print(head(covariates_data))
+
+
+```
+
+
+```{r}
+final_data <- gradrate_data %>%
+  left_join(semester_data, by =c("unitid", "year")) %>%
+  left_join(covariates_data, by = c("unitid", "year"))
+
+print(head(final_data))
+print(names(final_data))
+
+
+
+library(gt)
+
+# Calculate summary statistics for each column in final_data
+summary_stats <- summary(final_data)
+
+# Convert the summary statistics to a data frame
+summary_df <- as.data.frame(summary_stats)
+
+# Create a summary table using gt
+summary_table <- gt(summary_df)
+
+# Print the summary table
+print(summary_table)
+
+```
+
+
+
+
+```{r}
+
+
+# 各列に含まれるNAの数を数える
+na_counts <- colSums(is.na(final_data))
+print(na_counts)
+
+
+library(ggplot2)
+
+# 4年卒業率の平均推移を計算
+avg_grad_rate <- final_data %>%
+  group_by(year) %>%
+  summarise(mean_grad_rate = mean(total_gradrate_4yr, na.rm = TRUE))
+
+# 図で示す
+ggplot(avg_grad_rate, aes(x = year, y = mean_grad_rate)) +
+  geom_line() +
+  labs(title = "4年卒業率の平均推移", x = "年", y = "平均4年卒業率")
+
+
+# semester導入率を計算
+semester_rate <- final_data %>%
+  group_by(year) %>%
+  summarise(semester_rate = mean(semester, na.rm = TRUE))
+
+# 図で示す
+ggplot(semester_rate, aes(x = year, y =semester_rate)) +
+  geom_line() +
+  labs(title = "semester導入率の推移", x = "年", y = "semester導入率")
+
+```
+
+
+```{r}
+
+
+
+
+
+
+
+
+  # プロットを作成する関数
+plot_grad_rate_vs_variable <- function(data, variable, variable_name) {
+  ggplot(data, aes_string(x = variable, y = "total_gradrate_4yr")) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    labs(title = paste("4年卒業率 vs", variable_name), x = variable_name, y = "4年卒業率")
+}
+
+final_data <- final_data %>%
+mutate(
+    w_cohortsize = as.numeric(w_cohortsize),
+    totcohortsize = as.numeric(totcohortsize),
+    white_cohortsize = as.numeric(white_cohortsize),
+    totcohortsize = as.numeric(totcohortsize)
+  ) %>%
+  mutate(women_rate = w_cohortsize / totcohortsize,
+          white_rate= white_cohortsize / totcohortsize)
+         
+
+
+
+
+```
+
+
+
+```{r}
+
+
+# 女子学生率 vs 4年卒業率
+plot_grad_rate_vs_variable(final_data, "women_rate", "女子学生率")
+
+
+```
+
+
+```{r}
+
+# 白人学生比率 vs 4年卒業率
+plot_grad_rate_vs_variable(final_data, "white_rate", "白人学生比率")
+
+
+```
+
+```{r}
+
+# 学費 vs 4年卒業率
+plot_grad_rate_vs_variable(final_data, "instatetuition", "学費")
+
+
+```
+
+
+
+```{r}
+library(estimatr)
+
+# 回帰分析の実行
+regression_result <- lm_robust(total_gradrate_4yr~semester, data = final_data)
+
+# 回帰分析の結果を表示
+summary(regression_result)
+
+
+```
+
+
+
+
+```{r}
+
+## 整合性の確認
+
+library(gt)
+
+
+result_df<-read.csv()("C:\\Users\\yoshimura hiroki\\Box\\Personal\\topic\\coding\\github_practice\\RA\\warmup training package\\01_data\\intermediate\\master.csv")
+
+# Calculate summary statistics for each column in final_data
+summary_stats <- summary(result_df)
+
+# Convert the summary statistics to a data frame
+summary_df <- as.data.frame(summary_stats)
+
+# Create a summary table using gt
+summary_table <- gt(summary_df)
+
+# Print the summary table
+print(summary_table)
+
+
+```
+
+
+
+
+
+
+
+
+
+
